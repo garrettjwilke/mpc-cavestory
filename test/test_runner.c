@@ -162,27 +162,23 @@ static void test_ui_overlay_rebind_and_delete(void) {
 }
 
 static void test_cs_runner_integration(void) {
-    printf("[TEST] cs_runner integration with gamedata/ (extraction, scenes, 320x240 render, audio)...\n");
-    const char *data_dir = "gamedata/data";
+    printf("[TEST] cs_runner standalone embedded gamedata (zero external files, 320x240 render, audio)...\n");
     const char *user_dir = "/tmp/mpc_cs_test_user";
     mkdir(user_dir, 0755);
 
-    struct cs_runner *runner = cs_runner_create(data_dir, user_dir, 44100);
+    /* Pass NULL for data_dir to verify 100% embedded single-binary execution */
+    struct cs_runner *runner = cs_runner_create(NULL, user_dir, 44100);
     assert(runner != NULL);
 
     struct cs_input_state empty_in = {0, 0};
     uint32_t fb[CS_SCREEN_WIDTH * CS_SCREEN_HEIGHT];
     memset(fb, 0, sizeof(fb));
 
-    /* Tick 40 times to complete LoadingScene, extract Doukutsu.exe assets, and enter intro/title */
+    /* Tick 40 times to complete LoadingScene and enter intro/title from embedded VFS */
     for (int i = 0; i < 40; i++) {
         cs_runner_tick(runner, &empty_in);
     }
     assert(cs_runner_get_frame_count(runner) >= 40);
-
-    /* Verify Doukutsu.exe extraction created stage.sect in gamedata/data */
-    struct stat st;
-    assert(stat("gamedata/data/stage.sect", &st) == 0 && st.st_size > 0);
 
     /* Render 320x240 frame and verify non-black pixels are drawn */
     cs_runner_render(runner, fb);
@@ -192,7 +188,7 @@ static void test_cs_runner_integration(void) {
             non_zero_pixels++;
         }
     }
-    printf("       Rendered 320x240 frame: %d / %d non-black pixels\n",
+    printf("       Rendered 320x240 frame from embedded VFS: %d / %d non-black pixels\n",
            non_zero_pixels, CS_SCREEN_WIDTH * CS_SCREEN_HEIGHT);
     assert(non_zero_pixels > 100);
 
