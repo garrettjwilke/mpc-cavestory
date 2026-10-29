@@ -2,7 +2,19 @@
 
 cave story (doukutsu-rs) for the akai mpc sample.
 
+### requirements
+
+* rust
+* zig
+
+
 ### build
+
+get deps and submodules:
+
+```
+git submodule update --init
+```
 
 put your cave story `data/` folder inside `gamedata/data/` and run:
 
