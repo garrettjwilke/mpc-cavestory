@@ -1,6 +1,6 @@
 [submodule "doukutsu-rs"]
 	path = doukutsu-rs
-	url = https://github.com/doukutsu-rs/doukutsu-rs.git
+	url = https://github.com/garrettjwilke/doukutsu-rs.git
 [submodule "mpc-ui-toolkit"]
 	path = mpc-ui-toolkit
 	url = https://github.com/garrettjwilke/mpc-ui-toolkit.git
