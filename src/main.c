@@ -263,7 +263,11 @@ static bool is_dir(const char *path) {
 
 static void resolve_paths(int argc, char **argv, char *data_dir, size_t data_len, char *user_dir, size_t user_len) {
     char exe_dir[512] = ".";
-    if (argc > 0 && argv[0]) {
+    /* Set by the toolkit autorun launcher. The binary runs from /run. */
+    const char *home = getenv("MPC_APP_DIR");
+    if (home && home[0] && strlen(home) < sizeof(exe_dir)) {
+        snprintf(exe_dir, sizeof(exe_dir), "%s", home);
+    } else if (argc > 0 && argv[0]) {
         char tmp[512];
         snprintf(tmp, sizeof(tmp), "%s", argv[0]);
         char *slash = strrchr(tmp, '/');

@@ -24,7 +24,15 @@ make
 
 ### install
 
-use [mpc-boot-thingy](https://github.com/home-less/mpc-boot-thingy) to add `bin/mpc-cavestory` to your boot menu.
+`make` writes `build/autorun/` and `build/mpc-cavestory.zip`.
+
+copy `build/autorun/` onto the SD card, or add the zip with [mpc-boot-thingy](https://github.com/home-less/mpc-boot-thingy):
+
+```
+../mpc-boot-thingy/setup.sh --SD "/path/to/card" --add build/mpc-cavestory.zip
+```
+
+`make deploy` does that over SSH.
 
 ### controls
 

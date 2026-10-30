@@ -1,7 +1,8 @@
 # MPC Cave Story (doukutsu-rs) Runtime & Player for Akai MPC Sample.
-# `make` cross-builds bin/mpc-cavestory (aarch64-linux-musl static binary).
+# `make` cross-builds build/mpc-cavestory (aarch64-linux-musl static binary),
+# then packs build/autorun/ and build/mpc-cavestory.zip.
 # `make test` builds and runs the host unit + integration test suite.
-# `make deploy` uploads bin/mpc-cavestory to the MPC hardware via SSH / mpc-boot-thingy.
+# `make deploy` uploads the zip to the MPC via SSH / mpc-boot-thingy.
 
 WARN = -Wall -Wextra -std=c11 -D_DEFAULT_SOURCE
 HOSTCC = cc
@@ -11,7 +12,7 @@ ZIGCXX = zig c++ -target aarch64-linux-musl
 
 UI = mpc-ui-toolkit/src
 BUILD = build
-BIN = bin
+APP = $(BUILD)/mpc-cavestory
 
 CARGO_TARGET_DIR = $(CURDIR)/$(BUILD)/cargo
 HOST_RS_LIB = $(CARGO_TARGET_DIR)/release/libdoukutsu_rs.a
@@ -33,9 +34,12 @@ else
   HOST_LDFLAGS = -lstdc++ -lm -pthread -ldl
 endif
 
+PACK = mpc-ui-toolkit/tools/pack-autorun.sh
+ZIP = $(BUILD)/mpc-cavestory.zip
+
 .PHONY: all test doukutsu-host doukutsu-device deploy clean
 
-all: bin/mpc-cavestory
+all: $(ZIP)
 
 # -----------------------------------------------------------------------------
 # Host doukutsu-rs & Unit / Integration Tests
@@ -73,7 +77,7 @@ doukutsu-device: $(BUILD)/device/zig-shims
 	  --target aarch64-unknown-linux-musl --release \
 	  --no-default-features --features backend-mpc --lib
 
-bin/mpc-cavestory: doukutsu-device src/main.c $(SRC_APP) $(UI_DEVICE_SRC) | bin
+$(APP): doukutsu-device src/main.c $(SRC_APP) $(UI_DEVICE_SRC) | $(BUILD)
 	mkdir -p $(BUILD)/device/obj
 	for s in src/main.c $(SRC_APP) $(UI_DEVICE_SRC); do \
 	  obj=$(BUILD)/device/obj/$$(basename $$s .c).o; \
@@ -82,14 +86,14 @@ bin/mpc-cavestory: doukutsu-device src/main.c $(SRC_APP) $(UI_DEVICE_SRC) | bin
 	$(ZIGCXX) -static -O2 -s -o $@ $(BUILD)/device/obj/*.o \
 	  $(DEV_RS_LIB) -lm -pthread -ldl
 
-bin:
-	mkdir -p bin
+$(BUILD) $(BUILD)/host:
+	mkdir -p $@
 
-$(BUILD)/host:
-	mkdir -p $(BUILD)/host
+$(ZIP): $(APP) $(PACK)
+	$(PACK) --name mpc-cavestory --bin $(APP) --out $(BUILD)
 
-deploy: bin/mpc-cavestory
-	../mpc-boot-thingy/setup.sh --ssh --add bin/mpc-cavestory --title "mpc-cavestory"
+deploy: $(ZIP)
+	../mpc-boot-thingy/setup.sh --ssh --add $(ZIP) --title "mpc-cavestory"
 
 clean:
 	rm -rf build bin doukutsu-rs/target
