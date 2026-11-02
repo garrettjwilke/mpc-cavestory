@@ -1,3 +1,5 @@
+#include <dirent.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,8 +8,11 @@
 #include <unistd.h>
 
 #include "app.h"
+#include "filebrowser.h"
 #include "input.h"
 #include "ui.h"
+#include "usb_sd.h"
+#include "widgets.h"
 
 #include "audio_engine.h"
 #include "config.h"
@@ -300,6 +305,137 @@ static void resolve_paths(int argc, char **argv, char *data_dir, size_t data_len
     mkdir(user_dir, 0755);
 }
 
+int has_game_data(const char *path) {
+    if (!path || !path[0]) return 0;
+    struct stat st;
+    if (stat(path, &st) != 0 || !S_ISDIR(st.st_mode)) return 0;
+
+    DIR *d = opendir(path);
+    if (!d) return 0;
+    struct dirent *e;
+    int found = 0;
+    while ((e = readdir(d)) != NULL) {
+        if (e->d_name[0] == '.') continue;
+        char full[1024];
+        snprintf(full, sizeof(full), "%s/%s", path, e->d_name);
+        struct stat st2;
+        if (stat(full, &st2) == 0 && S_ISREG(st2.st_mode)) {
+            found = 1;
+            break;
+        }
+    }
+    closedir(d);
+    return found;
+}
+
+struct data_dir_picker {
+    int phase; /* 0 menu, 1 browse, 2 usb */
+    char data_dir[512];
+    struct ui_filebrowser fb;
+    int fb_ready;
+    struct ui_usb_sd usb;
+    int usb_ready;
+    struct ui_list_state list_state;
+    int selected;
+};
+
+int data_dir_picker_frame(struct ui *u, const struct input *in, void *state) {
+    struct data_dir_picker *p = (struct data_dir_picker *)state;
+    if (!p || !u) return 0;
+
+    if (p->selected) {
+        ui_quit(u);
+        return 1;
+    }
+
+    if (p->phase == 2) {
+        if (!p->usb_ready) {
+            ui_usb_sd_init(&p->usb);
+            p->usb_ready = 1;
+        }
+        struct ui_usb_sd_style ust = ui_usb_sd_style_default();
+        int rc = ui_usb_sd(u, &p->usb, ust, in);
+        if (rc == UI_USB_SD_DONE || rc == UI_USB_SD_FAILED) {
+            p->phase = 0;
+            p->usb_ready = 0;
+        }
+        return 0;
+    }
+
+    if (p->phase == 1) {
+        if (!p->fb_ready) {
+            struct ui_filebrowser_config cfg;
+            memset(&cfg, 0, sizeof(cfg));
+            cfg.initial_path = NULL;
+            cfg.title = "SELECT DATA FOLDER";
+            cfg.action_label = "SELECT";
+            cfg.options = UI_FB_OPT_HIDE_DOTFILES | UI_FB_OPT_TOGGLE_DOTFILES |
+                          UI_FB_OPT_DIRS_ONLY | UI_FB_OPT_SELECT_DIR |
+                          UI_FB_OPT_SHOW_SIZE;
+            ui_filebrowser_init(&p->fb, &cfg);
+            p->fb_ready = 1;
+        }
+        struct ui_filebrowser_style fst = ui_filebrowser_style_default();
+        int res = ui_filebrowser(u, 0, 0, UI_W, UI_H, &p->fb, fst, in);
+        if (res == UI_FB_SELECT) {
+            if (has_game_data(p->fb.selected_path)) {
+                snprintf(p->data_dir, sizeof(p->data_dir), "%s", p->fb.selected_path);
+                p->selected = 1;
+                ui_quit(u);
+            } else {
+                snprintf(p->fb.status_msg, sizeof(p->fb.status_msg), "No game data in folder");
+                p->fb.status_is_error = 1;
+            }
+        } else if (res == UI_FB_CANCEL) {
+            p->phase = 0;
+            p->fb_ready = 0;
+        }
+        return 0;
+    }
+
+    ui_clear(u, UI_BG);
+    ui_text(u, 12, 16, "Game data required", UI_HL, 2);
+    ui_text(u, 12, 40, "No game data directory was found.", UI_TEXT, 1);
+    ui_text(u, 12, 56, "Provide one to continue, or quit.", 0x9aa0a6, 1);
+
+    const char *rows[] = {"Browse for folder", "Add data directory with USB", "Quit"};
+    struct ui_list_style lst = {
+        .text = UI_TEXT,
+        .highlight = UI_HL,
+        .row_h = 24,
+        .highlight_px = 2,
+    };
+    int hit = ui_list(u, 12, 84, 296, 100, rows, 3, lst, in, &p->list_state);
+    if (hit == 0) {
+        p->phase = 1;
+        p->fb_ready = 0;
+    } else if (hit == 1) {
+        p->phase = 2;
+        p->usb_ready = 0;
+    } else if (hit == 2) {
+        ui_quit(u);
+    }
+
+    /* Also offer an explicit on-screen Quit button. Only activate it when the
+       list did not consume this frame's encoder press, otherwise selecting a
+       row above (e.g. "Add data directory with USB") would also trigger quit. */
+    struct ui_button qst = {
+        .fill = UI_BOX,
+        .text = UI_TEXT,
+        .border_set = 1,
+        .border = UI_HL,
+        .border_px = 1,
+        .highlighted = 1,
+        .highlight = UI_HL,
+        .highlight_px = 1,
+    };
+    if (hit < 0 && ui_button(u, 12, 200, 80, 24, "Quit", qst, in)) {
+        ui_quit(u);
+    }
+
+    return 0;
+}
+
 int main(int argc, char **argv) {
     struct app_state app;
     memset(&app, 0, sizeof(app));
@@ -308,6 +444,19 @@ int main(int argc, char **argv) {
     char data_dir[512];
     char user_dir[512];
     resolve_paths(argc, argv, data_dir, sizeof(data_dir), user_dir, sizeof(user_dir));
+
+    if (!has_game_data(data_dir)) {
+        struct data_dir_picker picker;
+        memset(&picker, 0, sizeof(picker));
+        picker.phase = 0;
+        picker.data_dir[0] = '\0';
+        picker.selected = 0;
+        app_run(data_dir_picker_frame, &picker);
+        if (!picker.selected || !has_game_data(picker.data_dir)) {
+            return 0;
+        }
+        snprintf(data_dir, sizeof(data_dir), "%s", picker.data_dir);
+    }
 
     char bindings_path[512];
     char settings_path[512];

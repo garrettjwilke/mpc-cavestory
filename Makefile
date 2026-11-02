@@ -25,7 +25,7 @@ DEV_CFLAGS  = $(WARN) -O2 $(INCLUDES)
 
 SRC_APP = src/input_map.c src/audio_engine.c src/ui_overlay.c src/config.c src/cJSON.c
 UI_COMMON_SRC = $(UI)/ui.c $(UI)/widgets.c $(UI)/filebrowser.c $(UI)/input.c
-UI_DEVICE_SRC = $(UI)/app.c $(UI)/screen.c $(UI)/surface.c $(UI_COMMON_SRC)
+UI_DEVICE_SRC = $(UI)/app.c $(UI)/screen.c $(UI)/surface.c $(UI)/usb_sd.c $(UI_COMMON_SRC)
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
