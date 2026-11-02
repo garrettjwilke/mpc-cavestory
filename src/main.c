@@ -377,6 +377,30 @@ int data_dir_picker_frame(struct ui *u, const struct input *in, void *state) {
         }
         struct ui_filebrowser_style fst = ui_filebrowser_style_default();
         int res = ui_filebrowser(u, 0, 0, UI_W, UI_H, &p->fb, fst, in);
+        if (res == UI_FB_ACTIVE && p->fb.cursor >= 0 && p->fb.cursor < p->fb.count) {
+            const struct ui_fb_entry *e = &p->fb.entries[p->fb.cursor];
+            char full[UI_FB_MAX_PATH];
+            if (e->is_dir) {
+                snprintf(full, sizeof(full), "%s/%s", p->fb.cwd[0] ? p->fb.cwd : "", e->name);
+                /* normalize leading slash */
+                if (full[0] == '/' && full[1] == '/') {
+                    /* collapse accidental double slash not needed; has_game_data handles stat */
+                }
+                if (has_game_data(full)) {
+                    snprintf(p->fb.status_msg, sizeof(p->fb.status_msg),
+                             "Data directory found. Use this directory?");
+                    p->fb.status_is_error = 0;
+                } else if (has_game_data(p->fb.cwd)) {
+                    snprintf(p->fb.status_msg, sizeof(p->fb.status_msg),
+                             "Data directory found. Press Select to use this directory.");
+                    p->fb.status_is_error = 0;
+                }
+            } else if (has_game_data(p->fb.cwd)) {
+                snprintf(p->fb.status_msg, sizeof(p->fb.status_msg),
+                         "Data directory found. Press Select to use this directory.");
+                p->fb.status_is_error = 0;
+            }
+        }
         if (res == UI_FB_SELECT) {
             if (has_game_data(p->fb.selected_path)) {
                 snprintf(p->data_dir, sizeof(p->data_dir), "%s", p->fb.selected_path);
@@ -445,6 +469,19 @@ int main(int argc, char **argv) {
     char user_dir[512];
     resolve_paths(argc, argv, data_dir, sizeof(data_dir), user_dir, sizeof(user_dir));
 
+    char bindings_path[512];
+    char settings_path[512];
+    snprintf(bindings_path, sizeof(bindings_path), "%s/bindings.json", user_dir);
+    snprintf(settings_path, sizeof(settings_path), "%s/settings.json", user_dir);
+
+    config_defaults(&app.settings);
+    config_load_settings(settings_path, &app.settings);
+
+    /* Use a remembered data directory if the resolved one is missing. */
+    if (!has_game_data(data_dir) && has_game_data(app.settings.data_dir)) {
+        snprintf(data_dir, sizeof(data_dir), "%s", app.settings.data_dir);
+    }
+
     if (!has_game_data(data_dir)) {
         struct data_dir_picker picker;
         memset(&picker, 0, sizeof(picker));
@@ -456,15 +493,9 @@ int main(int argc, char **argv) {
             return 0;
         }
         snprintf(data_dir, sizeof(data_dir), "%s", picker.data_dir);
+        snprintf(app.settings.data_dir, sizeof(app.settings.data_dir), "%s", picker.data_dir);
+        config_save_settings(settings_path, &app.settings);
     }
-
-    char bindings_path[512];
-    char settings_path[512];
-    snprintf(bindings_path, sizeof(bindings_path), "%s/bindings.json", user_dir);
-    snprintf(settings_path, sizeof(settings_path), "%s/settings.json", user_dir);
-
-    config_defaults(&app.settings);
-    config_load_settings(settings_path, &app.settings);
 
     input_map_init(&app.map);
     input_map_apply_preset(&app.map, (enum input_preset_id)app.settings.preset);

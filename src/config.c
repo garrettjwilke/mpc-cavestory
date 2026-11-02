@@ -70,6 +70,11 @@ bool config_load_settings(const char *path, struct app_settings *s) {
         if (p >= 0 && p < PRESET_COUNT) s->preset = p;
     }
 
+    cJSON *dd = cJSON_GetObjectItemCaseSensitive(root, "data_dir");
+    if (cJSON_IsString(dd) && dd->valuestring) {
+        snprintf(s->data_dir, sizeof(s->data_dir), "%s", dd->valuestring);
+    }
+
     cJSON_Delete(root);
     return true;
 }
@@ -82,6 +87,9 @@ bool config_save_settings(const char *path, const struct app_settings *s) {
     cJSON_AddNumberToObject(root, "volume", s->volume);
     cJSON_AddBoolToObject(root, "speaker_on", s->speaker_on);
     cJSON_AddNumberToObject(root, "preset", s->preset);
+    if (s->data_dir[0]) {
+        cJSON_AddStringToObject(root, "data_dir", s->data_dir);
+    }
 
     char *out = cJSON_Print(root);
     cJSON_Delete(root);

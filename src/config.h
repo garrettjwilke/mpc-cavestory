@@ -8,6 +8,7 @@ struct app_settings {
     int volume;          /* 0 .. 100 */
     bool speaker_on;     /* Builtin speaker enabled */
     int preset;          /* enum input_preset_id */
+    char data_dir[512];  /* Remembered game data directory, if any */
 };
 
 void config_defaults(struct app_settings *settings);
